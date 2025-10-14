@@ -165,4 +165,65 @@ async def stream_chat_with_documents(user_id: str = Form(...), query: str = Form
 
     except Exception as e:
         print(f"Error during chat stream: {e}")
-        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")   
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}") 
+
+    # backend/app.py
+# ... (keep all existing imports and code)
+import json
+
+@app.post("/generate-quiz")
+async def generate_quiz(user_id: str = Form(...)):
+    """Generates a quiz from the user's documents."""
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID is required.")
+
+    try:
+        # 1. Retrieve a broad context from all user documents
+        collection = vector_store.get_or_create_collection(user_id)
+        # We get a large number of chunks to give the LLM enough material
+        context_chunks = collection.get(limit=20)["documents"]
+        
+        if not context_chunks:
+            raise HTTPException(status_code=404, detail="Not enough document content to generate a quiz.")
+        
+        context_str = "\n".join(context_chunks)
+        
+        # 2. Create a specific prompt for the LLM to generate JSON
+        quiz_prompt = f"""
+        Based on the following context, generate exactly 3 multiple-choice quiz questions.
+        You MUST respond with only a valid JSON object. Do not include any text or formatting before or after the JSON.
+        The JSON object should be an array of questions. Each question object must have three keys:
+        1. "question": A string for the question text.
+        2. "options": An array of 4 strings representing the possible answers.
+        3. "answer": A string that is the correct answer from the "options" array.
+
+        Here is an example of the required format:
+        [
+            {{
+                "question": "What is the capital of France?",
+                "options": ["London", "Berlin", "Paris", "Madrid"],
+                "answer": "Paris"
+            }}
+        ]
+
+        Context:
+        {context_str}
+        """
+
+        # 3. Call Ollama to get the structured JSON response
+        full_response = rag_pipeline.generate_non_stream_answer(quiz_prompt, llm_model="llama3")
+
+        # 4. Parse and validate the JSON
+        try:
+            quiz_json = json.loads(full_response)
+            # Basic validation to ensure it's a list
+            if not isinstance(quiz_json, list):
+                raise ValueError("Response is not a list.")
+            return quiz_json
+        except (json.JSONDecodeError, ValueError) as e:
+            print(f"Failed to parse LLM response as JSON: {e}")
+            raise HTTPException(status_code=500, detail="Failed to generate a valid quiz. The model response was not in the correct format.")
+
+    except Exception as e:
+        print(f"Error during quiz generation: {e}")
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")  
