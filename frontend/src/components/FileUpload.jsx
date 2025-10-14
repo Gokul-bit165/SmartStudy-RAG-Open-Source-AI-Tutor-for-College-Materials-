@@ -3,9 +3,9 @@ import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { uploadFile } from '../api/api';
 import { Toaster, toast } from 'sonner';
-import { UploadCloud, File as FileIcon, Loader2 } from 'lucide-react';
+import { UploadCloud, Loader2 } from 'lucide-react'; // Using icons
 
-const FileUpload = ({ userId, onUploadSuccess }) => {
+const FileUpload = ({ userId }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const onDrop = useCallback(async (acceptedFiles) => {
@@ -18,16 +18,13 @@ const FileUpload = ({ userId, onUploadSuccess }) => {
     try {
       const response = await uploadFile(userId, file);
       toast.success(response.data.message || `${file.name} uploaded successfully!`);
-      if (onUploadSuccess) {
-        onUploadSuccess(file.name);
-      }
     } catch (error) {
       const errorMessage = error.response?.data?.detail || 'An unknown error occurred.';
       toast.error(`Upload failed: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
-  }, [userId, onUploadSuccess]);
+  }, [userId]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -38,11 +35,12 @@ const FileUpload = ({ userId, onUploadSuccess }) => {
   return (
     <>
       <Toaster position="top-center" richColors />
-      <div className="p-4 bg-gray-800 rounded-lg border-2 border-dashed border-gray-600">
+      <div className="p-4 bg-gray-800 rounded-lg border border-gray-700">
         <h2 className="text-xl font-semibold mb-4 text-center text-gray-300">Upload Your Materials</h2>
         <div
           {...getRootProps()}
-          className={`cursor-pointer p-8 text-center rounded-md transition-colors ${
+          className={`cursor-pointer p-8 text-center rounded-md border-2 border-dashed
+            transition-colors ${
             isDragActive ? 'bg-gray-700 border-blue-400' : 'bg-gray-800 border-gray-600'
           }`}
         >
@@ -54,7 +52,7 @@ const FileUpload = ({ userId, onUploadSuccess }) => {
               <UploadCloud className="h-12 w-12 text-gray-500" />
             )}
             <p className="mt-4 text-gray-400">
-              {isDragActive ? 'Drop the PDF here...' : 'Drag & drop a PDF here, or click to select'}
+              {isDragActive ? 'Drop the PDF here...' : 'Drag & drop a PDF here, or click'}
             </p>
             <p className="text-xs text-gray-500 mt-1">Single PDF file only</p>
           </div>

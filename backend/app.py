@@ -4,6 +4,8 @@ import uuid
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
+import shutil
+from fastapi.responses import StreamingResponse
 
 # Import utility functions
 from utils import pdf_loader, text_splitter, embeddings, vector_store, rag_pipeline
@@ -100,3 +102,67 @@ async def chat_with_documents(user_id: str = Form(...), query: str = Form(...)):
     except Exception as e:
         print(f"Error during chat: {e}")
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+    
+
+@app.get("/documents/")
+async def list_documents(user_id: str):
+    """Lists all documents uploaded by a user."""
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID is required.")
+    
+    user_upload_dir = os.path.join(UPLOAD_DIR, user_id)
+    if not os.path.exists(user_upload_dir):
+        return []
+    
+    return sorted([f for f in os.listdir(user_upload_dir) if f.endswith('.pdf')])
+
+@app.delete("/documents/{filename}")
+async def delete_document(user_id: str, filename: str):
+    """Deletes a specific document and its associated embeddings."""
+    if not user_id or not filename:
+        raise HTTPException(status_code=400, detail="User ID and filename are required.")
+
+    try:
+        # 1. Delete the physical file
+        file_path = os.path.join(UPLOAD_DIR, user_id, filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        else:
+            raise HTTPException(status_code=404, detail="File not found.")
+
+        # 2. Delete embeddings from ChromaDB
+        collection = vector_store.get_or_create_collection(user_id)
+        # This is powerful: we delete vectors based on their source metadata
+        collection.delete(where={"source": filename})
+        
+        print(f"Successfully deleted {filename} and its embeddings for user {user_id}.")
+        return {"message": f"Document '{filename}' and its embeddings deleted successfully."}
+
+    except Exception as e:
+        print(f"Error during deletion: {e}")
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+    
+
+@app.post("/chat/stream")
+async def stream_chat_with_documents(user_id: str = Form(...), query: str = Form(...)):
+    """Handles streaming chat with documents."""
+    if not user_id or not query:
+        raise HTTPException(status_code=400, detail="User ID and query are required.")
+    
+    try:
+        collection = vector_store.get_or_create_collection(user_id)
+        query_embedding = embeddings.embed_texts([query])
+        context_chunks = vector_store.retrieve_context(collection, query_embedding, top_k=5)
+        
+        if not context_chunks:
+            async def empty_stream():
+                yield "I couldn't find any relevant information in your documents to answer that."
+            return StreamingResponse(empty_stream(), media_type="text/event-stream")
+
+        # The generator function is passed directly to StreamingResponse
+        response_generator = rag_pipeline.generate_stream(context_chunks, query)
+        return StreamingResponse(response_generator, media_type="text/event-stream")
+
+    except Exception as e:
+        print(f"Error during chat stream: {e}")
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")   

@@ -1,12 +1,13 @@
 // frontend/src/components/ChatBox.jsx
 import React, { useState, useRef, useEffect } from 'react';
-import { postQuery } from '../api/api';
+// Import the new streamQuery function
+import { streamQuery } from '../api/api';
 import MessageBubble from './MessageBubble';
 import { Send, Loader2 } from 'lucide-react';
 
 const ChatBox = ({ userId }) => {
   const [messages, setMessages] = useState([
-    { text: "Hello! Ask me anything about your uploaded documents.", sender: 'ai' }
+    { id: 1, text: "Hello! Ask me anything about your documents.", sender: 'ai', isStreaming: false }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -20,61 +21,75 @@ const ChatBox = ({ userId }) => {
 
   const handleSend = async () => {
     if (!input.trim()) return;
-
-    const userMessage = { text: input, sender: 'user' };
-    setMessages(prev => [...prev, userMessage]);
-    setInput('');
     setIsLoading(true);
 
+    const userMessage = { id: Date.now(), text: input, sender: 'user' };
+    // Create an initial, empty AI message that will be populated by the stream
+    const aiMessage = { id: Date.now() + 1, text: '', sender: 'ai', isStreaming: true };
+    
+    setMessages(prev => [...prev, userMessage, aiMessage]);
+    setInput('');
+
     try {
-      const response = await postQuery(userId, input);
-      const aiMessage = {
-        text: response.data.answer,
-        sender: 'ai',
-        context: response.data.context,
-      };
-      setMessages(prev => [...prev, aiMessage]);
+      const response = await streamQuery(userId, input);
+
+      if (!response.body) {
+        throw new Error("Response body is null");
+      }
+      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      
+      // Read the stream
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === aiMessage.id ? { ...msg, text: msg.text + chunk } : msg
+          )
+        );
+      }
+
+      // Mark the message as finished streaming
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.id === aiMessage.id ? { ...msg, isStreaming: false } : msg
+        )
+      );
+
     } catch (error) {
       const errorMessage = {
-        text: "Sorry, I couldn't get a response. Please check the backend and try again.",
+        id: aiMessage.id, // Replace the empty AI message with an error
+        text: "Sorry, I couldn't get a response. Please try again.",
         sender: 'ai',
+        isStreaming: false,
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => prev.map(msg => msg.id === aiMessage.id ? errorMessage : msg));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
+  // ... (keep handleKeyPress function)
+  // ... (JSX is almost the same, but pass the isStreaming prop)
   return (
     <div className="flex flex-col h-[70vh] bg-gray-800 rounded-lg border border-gray-700 shadow-xl">
       <div className="flex-1 p-4 overflow-y-auto">
-        {messages.map((msg, index) => (
-          <MessageBubble key={index} message={msg} />
+        {messages.map((msg) => (
+          <MessageBubble key={msg.id} message={msg} />
         ))}
-        {isLoading && (
-            <div className="flex justify-start">
-                <div className="flex items-center space-x-2 bg-gray-700 rounded-lg p-3 max-w-lg">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span className="text-gray-300">Thinking...</span>
-                </div>
-            </div>
-        )}
         <div ref={messagesEndRef} />
       </div>
       <div className="p-4 border-t border-gray-700">
         <div className="flex items-center space-x-2">
-          <textarea
+           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Ask a question about your documents..."
+            // onKeyPress={handleKeyPress}
+            placeholder="Ask a question..."
             className="flex-1 p-2 bg-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             rows="1"
             disabled={isLoading}

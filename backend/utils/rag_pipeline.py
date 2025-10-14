@@ -1,38 +1,35 @@
 # backend/utils/rag_pipeline.py
-import subprocess
-from typing import List
+import ollama
+from typing import List, Generator
 
-def generate_answer(context: List[str], query: str, llm_model: str = "llama3") -> str:
-    """Generates an answer using a local LLM with the provided context and query."""
-    
+def generate_stream(context: List[str], query: str, llm_model: str = "llama3") -> Generator:
+    """Generates a streaming response using the Ollama Python library."""
     context_str = "\n".join(context)
     
-    # Simple and clear prompt template
     prompt = f"""
-    You are a helpful AI assistant for students. Use the following context to answer the question.
-    If you don't know the answer, just say that you don't know, don't try to make up an answer.
+    Use the following context to answer the question.
+    If the context doesn't contain the answer, say that you couldn't find the relevant information.
     
     Context:
     {context_str}
     
     Question: {query}
-    
-    Answer:
     """
 
     try:
-        # Using ollama run command
-        command = ["ollama", "run", llm_model, prompt]
+        # stream=True makes the magic happen!
+        stream = ollama.chat(
+            model=llm_model,
+            messages=[{'role': 'user', 'content': prompt}],
+            stream=True,
+        )
         
-        # Execute the command
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
-        
-        # The output from the LLM is in result.stdout
-        return result.stdout.strip()
+        for chunk in stream:
+            yield chunk['message']['content']
 
-    except FileNotFoundError:
-        return "Error: 'ollama' command not found. Make sure Ollama is installed and in your PATH."
-    except subprocess.CalledProcessError as e:
-        return f"Error executing Ollama: {e.stderr}"
     except Exception as e:
-        return f"An unexpected error occurred: {str(e)}"
+        print(f"An error occurred while connecting to Ollama: {e}")
+        yield (
+            "Error: Could not connect to Ollama. "
+            "Please make sure the Ollama application is running."
+        )

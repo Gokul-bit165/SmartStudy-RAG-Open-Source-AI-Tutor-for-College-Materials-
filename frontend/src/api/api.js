@@ -25,3 +25,22 @@ export const postQuery = (userId, query) => {
      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
 };
+
+export const getDocuments = (userId) => {
+  return apiClient.get(`/documents/?user_id=${userId}`);
+};
+
+export const deleteDocument = (userId, filename) => {
+  return apiClient.delete(`/documents/${filename}?user_id=${userId}`);
+};
+
+export const streamQuery = (userId, query) => {
+  const formData = new FormData();
+  formData.append('user_id', userId);
+  formData.append('query', query);
+  
+  return fetch('http://127.0.0.1:8000/chat/stream', {
+    method: 'POST',
+    body: formData,
+  });
+};
