@@ -3,9 +3,10 @@ import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { uploadFile } from '../api/api';
 import { Toaster, toast } from 'sonner';
-import { UploadCloud, Loader2 } from 'lucide-react'; // Using icons
+import { UploadCloud, Loader2 } from 'lucide-react';
 
-const FileUpload = ({ userId }) => {
+// The 'userId' prop is removed; use 'onUploadSuccess' instead
+const FileUpload = ({ onUploadSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const onDrop = useCallback(async (acceptedFiles) => {
@@ -14,17 +15,18 @@ const FileUpload = ({ userId }) => {
 
     setIsLoading(true);
     toast.loading(`Uploading ${file.name}...`);
-
     try {
-      const response = await uploadFile(userId, file);
+      const response = await uploadFile(file);
       toast.success(response.data.message || `${file.name} uploaded successfully!`);
+      if (onUploadSuccess) {
+        onUploadSuccess(file.name);
+      }
     } catch (error) {
-      const errorMessage = error.response?.data?.detail || 'An unknown error occurred.';
-      toast.error(`Upload failed: ${errorMessage}`);
+      toast.error(`Upload failed: ${error.response?.data?.detail || 'Please try again.'}`);
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, [onUploadSuccess]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -39,8 +41,7 @@ const FileUpload = ({ userId }) => {
         <h2 className="text-xl font-semibold mb-4 text-center text-gray-300">Upload Your Materials</h2>
         <div
           {...getRootProps()}
-          className={`cursor-pointer p-8 text-center rounded-md border-2 border-dashed
-            transition-colors ${
+          className={`cursor-pointer p-8 text-center rounded-md border-2 border-dashed transition-colors ${
             isDragActive ? 'bg-gray-700 border-blue-400' : 'bg-gray-800 border-gray-600'
           }`}
         >

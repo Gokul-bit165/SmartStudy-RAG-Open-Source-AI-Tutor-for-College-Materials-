@@ -4,15 +4,16 @@ import { getDocuments, deleteDocument } from '../api/api';
 import { FileText, Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-const DocumentList = ({ userId, onUploadSuccess }) => {
+// 'userId' prop removed, only 'onUploadSuccess' is accepted
+const DocumentList = ({ onUploadSuccess }) => {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState(null); // Tracks which file is being deleted
+  const [deleting, setDeleting] = useState(null);
 
   const fetchDocuments = async () => {
     try {
       setLoading(true);
-      const response = await getDocuments(userId);
+      const response = await getDocuments();
       setDocuments(response.data);
     } catch (error) {
       toast.error('Failed to fetch documents.');
@@ -23,25 +24,21 @@ const DocumentList = ({ userId, onUploadSuccess }) => {
 
   useEffect(() => {
     fetchDocuments();
-  }, [userId, onUploadSuccess]); // Refreshes when a new file is uploaded
+  }, [onUploadSuccess]);
 
   const handleDelete = async (filename) => {
-    if (!window.confirm(`Are you sure you want to delete ${filename}? This cannot be undone.`)) {
-      return;
-    }
-    
+    if (!window.confirm(`Are you sure you want to delete ${filename}?`)) return;
     setDeleting(filename);
     try {
-      await deleteDocument(userId, filename);
+      await deleteDocument(filename);
       toast.success(`${filename} deleted successfully.`);
-      // Pro animation: fade out before removing from state
       const docElement = document.getElementById(`doc-${filename}`);
       if (docElement) {
         docElement.classList.add('opacity-0');
         setTimeout(() => {
           setDocuments(docs => docs.filter(doc => doc !== filename));
           setDeleting(null);
-        }, 300); // Match timeout with CSS transition duration
+        }, 300);
       }
     } catch (error) {
       toast.error(`Failed to delete ${filename}.`);
