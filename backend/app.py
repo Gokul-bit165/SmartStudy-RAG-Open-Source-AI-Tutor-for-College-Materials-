@@ -88,7 +88,7 @@ async def delete_document(filename: str, current_user: dict = Depends(get_curren
 @app.post("/chat/stream")
 async def stream_chat(query: str = Form(...), current_user: dict = Depends(get_current_user)):
     user_id = current_user["id"]
-    supabase.table('chat_history').insert({"user_id": user_id, "question": query}).execute()
+    supabase.table('chat_history').insert({"user_id": user_id, "message": query, "sender": "user"}).execute()
 
     collection = vector_store.get_or_create_collection(user_id)
     query_embedding = embeddings.embed_texts([query])
